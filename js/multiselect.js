@@ -160,7 +160,8 @@ var TextboxList = Class.create({
 			onRemove: function(text){},
 			hideempty: true,
 			newValues: false,
-			spaceReplace: ''
+			spaceReplace: '',
+			allowComma: false
 		});
 
 		this.current_input = "";
@@ -291,7 +292,7 @@ var TextboxList = Class.create({
 
 			new_value_el.value = new_value_el.value.strip();
 			
-			if (new_value_el.value.indexOf(",") < (new_value_el.value.length - 1))
+			if (!this.options.get('allowComma') && new_value_el.value.indexOf(",") < (new_value_el.value.length - 1))
 			{
 				var comma_pos = new_value_el.value.indexOf(",");
 				if (comma_pos > 0)
@@ -301,7 +302,12 @@ var TextboxList = Class.create({
 			}
 			else
 			{
-				new_value_el.value = new_value_el.value.gsub(",","").escapeHTML().strip();
+			    var new_value = new_value_el.value;
+			    if (!this.options.get('allowComma'))
+			    {
+				    new_value = new_value.gsub(",","");
+			    }
+		        new_value_el.value = new_value.escapeHTML().strip();
 			}
 			
 			if (!this.options.get("spaceReplace").blank())
@@ -438,6 +444,11 @@ var TextboxList = Class.create({
 					switch (e.keyCode)
 					{
 						case Event.KEY_COMMA:
+						    if (this.options.get('allowComma'))
+						    {
+						        break;
+						    }
+						    // fall through
 						case Event.KEY_RETURN:
 							if (this.insertCurrent())
 							{
@@ -816,6 +827,10 @@ var ProtoMultiSelect = Class.create(TextboxList, {
 					this.current_input = "";
 					this.autocurrent = false;
 					this.autoenter = true;
+					
+					// After clearing current_input, update again to ensure the old value doesn't
+					// end up in the submitted form.
+					this.update();
 					break;
 				
 				case Event.KEY_ESC:
@@ -836,7 +851,6 @@ var ProtoMultiSelect = Class.create(TextboxList, {
 		{
 			switch (e.keyCode)
 			{
-				case Event.KEY_COMMA:
 				case Event.KEY_RETURN:
 				case Event.KEY_UP:
 				case Event.KEY_DOWN:
@@ -844,6 +858,11 @@ var ProtoMultiSelect = Class.create(TextboxList, {
 					break;
 				
 				default:
+				    if (e.keyCode == Event.KEY_COMMA && !this.options.get('allowComma'))
+				    {
+				        break;
+				    }
+				    
 					// If the user doesn't add comma after, the value is discarded upon submit
 					this.current_input = input.value.strip().escapeHTML();
 					this.update();
@@ -858,7 +877,7 @@ var ProtoMultiSelect = Class.create(TextboxList, {
 						var sanitizer = new RegExp("[({[^$*+?\\\]})]","g");
 						if (this.dosearch)
 						{
-							this.autocurrent = false
+							this.autocurrent = false;
 							this.autoShow(input.value.replace(sanitizer,"\\$1"));
 						}
 					}.bind(this), this.options.get('autoDelay'));
@@ -903,7 +922,7 @@ var ProtoMultiSelect = Class.create(TextboxList, {
 	
 	loadFromInput: function()
   {
-		var input_values = this.element.value.split(',').invoke('strip');
+		var input_values = this.element.value.split(this.options.get('separator')).invoke('strip');
 
     if (this.data.length)
     {
