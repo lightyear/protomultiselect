@@ -860,10 +860,6 @@ var ProtoMultiSelect = Class.create(TextboxList, {
 					this.current_input = "";
 					this.autocurrent = false;
 					this.autoenter = true;
-					
-					// After clearing current_input, update again to ensure the old value doesn't
-					// end up in the submitted form.
-					this.update();
 					break;
 				
 				case Event.KEY_ESC:
