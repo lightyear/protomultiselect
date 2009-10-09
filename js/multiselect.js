@@ -4,7 +4,7 @@
 */
 
 // Added key contstant for COMMA watching happiness
-Object.extend(Event, { KEY_COMMA: 188, KEY_SPACE: 32 });
+Object.extend(Event, { KEY_COMMA: 188, CHAR_COMMA: 44 });
 
 // helper functions
 Element.addMethods({
@@ -55,6 +55,18 @@ Element.addMethods({
 		{
 			obj.blurhide = obj.autoHide.bind(obj).delay(0.1);
 		}
+	}
+});
+
+Object.extend(String.prototype, {
+	entitizeHTML: function()
+	{
+		return this.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+	},
+
+	unentitizeHTML: function()
+	{
+		return this.replace(/&lt;/g,'<').replace(/&gt;/g,'>');
 	}
 });
 
@@ -161,6 +173,7 @@ var TextboxList = Class.create({
 			hideempty: true,
 			newValues: false,
 			spaceReplace: '',
+			encodeEntities: false,
 			allowComma: false
 		});
 
@@ -204,7 +217,7 @@ var TextboxList = Class.create({
 				
 				return null;
 			}.bind(this)
-		).observe(Prototype.Browser.IE ? 'keydown' : 'keypress',
+		).observe(Prototype.Browser.IE || Prototype.Browser.WebKit ? 'keydown' : 'keypress',
 			function(e)
 			{
 				if (!this.current) return null;
@@ -230,7 +243,13 @@ var TextboxList = Class.create({
 
 	update: function()
 	{
-		this.element.value = this.bits.values().join(this.options.get('separator'));
+		var values = this.bits.values();
+		if (this.options.get('encodeEntities'))
+		{
+			// entitizeHTML / unentitizeHTML needs to be called around the unescapeHTML() call in order to preserve any braces
+			values = values.map(function(e) { return e.toString().entitizeHTML().unescapeHTML().unentitizeHTML(); });
+		}
+		this.element.value = values.join(this.options.get('separator'));
 		if (!this.current_input.blank())
 		{
 			this.element.value += (this.element.value.blank() ? "" : this.options.get('separator')) + this.current_input;
@@ -297,17 +316,12 @@ var TextboxList = Class.create({
 				var comma_pos = new_value_el.value.indexOf(",");
 				if (comma_pos > 0)
 				{
-					new_value_el.value = new_value_el.value.substr(0, comma_pos).escapeHTML().strip();
+					new_value_el.value = new_value_el.value.substr(0, comma_pos).strip();
 				}
 			}
 			else
 			{
-			    var new_value = new_value_el.value;
-			    if (!this.options.get('allowComma'))
-			    {
-				    new_value = new_value.gsub(",","");
-			    }
-		        new_value_el.value = new_value.escapeHTML().strip();
+				new_value_el.value = new_value_el.value.strip();
 			}
 			
 			if (!this.options.get("spaceReplace").blank())
@@ -319,6 +333,11 @@ var TextboxList = Class.create({
 			{
 				this.newvalue = true;
 				var value = new_value_el.value;
+				if (!this.options.get('allowComma'))
+				{
+				    value = value.gsub(",", "");
+				}
+				value = this.options.get('encodeEntities') ? value.entitizeHTML() : value.escapeHTML();
 				new_value_el.retrieveData('resizable').clear().focus();
 
 				this.current_input = ""; // stops the value from being added to the element twice
@@ -334,7 +353,9 @@ var TextboxList = Class.create({
 	{
 		this.bits.unset(el.id);
 		// Dynamic updating... why not?
-		this.options.get("onRemove")( el.innerHTML.stripScripts().unescapeHTML().replace(/[\n\r\s]+/g, ' ') );
+		var value = el.innerHTML.stripScripts();
+		value = this.options.get('encodeEntities') ? value.entitizeHTML() : value.escapeHTML();
+		this.options.get("onRemove")( value.replace(/[\n\r\s]+/g, ' ') );
 		this.update();
 		
 		if (el.previous() && el.previous().retrieveData('small'))
@@ -414,7 +435,7 @@ var TextboxList = Class.create({
 
 	createBox: function(text, options)
 	{
-		var box = new Element('a', options).addClassName(this.options.get('className') + '-box').update(text.caption).cacheData('type', 'box');
+		var box = new Element('a', options).addClassName(this.options.get('className') + '-box').update(text.caption.entitizeHTML()).cacheData('type', 'box');
 		var a = new Element('a', {
 			href: '#',
 			'class': 'closebutton'
@@ -439,22 +460,27 @@ var TextboxList = Class.create({
 		el.observe('focus', function(e) { if (!this.isSelfEvent('focus')) this.focus(a, true); }.bind(this))
 			.observe('blur', function() { if (!this.isSelfEvent('blur')) this.blur(true); }.bind(this))
 			.observe('keydown', function(e) { this.cacheData('lastvalue', this.value).cacheData('lastcaret', this.getCaretPosition()); })
+			.observe('keypress', function(e)
+				{
+					var charCode = e.charCode || e.keyCode;
+					if (e.keyCode == Event.KEY_RETURN ||
+					    (charCode == Event.CHAR_COMMA && !this.options.get('allowComma')))
+					{
+						this.insertCurrentValue = true;
+					}
+				}.bind(this))
 			.observe('keyup', function(e)
 				{
-					switch (e.keyCode)
+					if (e.keyCode == Event.KEY_RETURN && !this.insertCurrentValue) this.insertCurrentValue = true;
+
+					// We need to do the insert on keyup so that a value of just a comma won't be accepted
+					if (this.insertCurrentValue)
 					{
-						case Event.KEY_COMMA:
-						    if (this.options.get('allowComma'))
-						    {
-						        break;
-						    }
-						    // fall through
-						case Event.KEY_RETURN:
-							if (this.insertCurrent())
-							{
-								e.stop();
-							}
-							break;
+						if (this.insertCurrent())
+						{
+							e.stop();
+						}
+						this.insertCurrentValue = false;
 					}
 				}.bind(this));
 
@@ -684,6 +710,8 @@ var ProtoMultiSelect = Class.create(TextboxList, {
 					
 					var that = this;
 					var el = new Element('li');
+					var caption = result.evalJSON(true).caption;
+					
 					el.observe('click', function(e)
 						{
 							e.stop();
@@ -691,7 +719,7 @@ var ProtoMultiSelect = Class.create(TextboxList, {
 							that.autoAdd(this);
 						})
 						.observe('mouseover', function() { that.autoFocus(this); } )
-						.update(this.autoHighlight(result.evalJSON(true).caption, search));
+						.update(this.autoHighlight(caption, search));
 					
 					this.autoresults.insert(el);
 					el.cacheData('result', result.evalJSON(true));
@@ -728,11 +756,12 @@ var ProtoMultiSelect = Class.create(TextboxList, {
 	
 	autoHighlight: function(html, highlight)
 	{
-		return html.gsub(new RegExp(highlight,'i'), function(match)
+		// Because the autocomplete will be filled with HTML, we need to escape any HTML in the string
+		return html.entitizeHTML().unescapeHTML().gsub(new RegExp(highlight,'i'), function(match)
 			{
 				return '<em>' + match[0] + '</em>';
 			}
-		);
+		).gsub(/<(?!\/?em>)/, "&lt;"); // ... except for the <em> tags that we add here.
 	},
 
 	autoHide: function()
@@ -764,7 +793,8 @@ var ProtoMultiSelect = Class.create(TextboxList, {
 		if (this.data.indexOf(Object.toJSON(text)) == -1)
 		{
 			this.data.push(Object.toJSON(text));
-			this.data_searchable.push(with_case ? Object.toJSON(text).evalJSON(true).caption : Object.toJSON(text).evalJSON(true).caption.toLowerCase());
+			var data_searchable = Object.toJSON(text).evalJSON(true).caption.unentitizeHTML();
+			this.data_searchable.push(with_case ? data_searchable : data_searchable.toLowerCase());
 		}
 		return this;
 	},
@@ -773,6 +803,7 @@ var ProtoMultiSelect = Class.create(TextboxList, {
 	{
 		if (!el || !el.retrieveData('result')) return null;
 			
+		this.current_input = "";
 		this.add(el.retrieveData('result'));
 		delete this.data[this.data.indexOf(Object.toJSON(el.retrieveData('result')))];
 		var input = this.lastinput || this.current.retrieveData('input');
@@ -802,6 +833,7 @@ var ProtoMultiSelect = Class.create(TextboxList, {
 				case Event.KEY_UP: e.stop(); return this.autoMove('up');
 				case Event.KEY_DOWN: e.stop(); return this.autoMove('down');
 				case Event.KEY_RETURN:
+				case Event.KEY_TAB:
 					var input_value = this.current.retrieveData('input').getValue();
 					
 					// If the text input is blank and the user hits Enter call the onEmptyInput callback.
@@ -815,7 +847,7 @@ var ProtoMultiSelect = Class.create(TextboxList, {
 
 					// Ensure that the value matches this.autocurrent before autoAdd'ing.
 					// This stops the wrong value from being added if the user types fast and hits enter before a new autocurrent is found
-					if (this.autocurrent && new RegExp(input_value, 'i').test(this.autocurrent.retrieveData('result').caption))
+					if (this.autocurrent && new RegExp(input_value, 'i').test(this.autocurrent.retrieveData('result').caption.unentitizeHTML()))
 					{
 						this.autoAdd(this.autocurrent);
 					}
@@ -852,6 +884,7 @@ var ProtoMultiSelect = Class.create(TextboxList, {
 			switch (e.keyCode)
 			{
 				case Event.KEY_RETURN:
+				case Event.KEY_TAB:
 				case Event.KEY_UP:
 				case Event.KEY_DOWN:
 				case Event.KEY_ESC:
@@ -864,7 +897,7 @@ var ProtoMultiSelect = Class.create(TextboxList, {
 				    }
 				    
 					// If the user doesn't add comma after, the value is discarded upon submit
-					this.current_input = input.value.strip().escapeHTML();
+					this.current_input = this.options.get('encodeEntities') ? input.value.strip().entitizeHTML() : input.value.strip().escapeHTML();
 					this.update();
 					
 					// Removed Ajax.Request from here and moved to initialize,
