@@ -1,3 +1,4 @@
+/* -*- Mode: JavaScript; indent-tabs-mode: t -*- */
 /*
 	Proto!MultiSelect
 	Copyright: InteRiders <http://interiders.com/> - Distributed under MIT - Keep this message!
@@ -335,7 +336,7 @@ var TextboxList = Class.create({
 				var value = new_value_el.value;
 				if (!this.options.get('allowComma'))
 				{
-				    value = value.gsub(",", "");
+					value = value.gsub(",", "");
 				}
 				value = this.options.get('encodeEntities') ? value.entitizeHTML() : value.escapeHTML();
 				new_value_el.retrieveData('resizable').clear().focus();
@@ -464,7 +465,7 @@ var TextboxList = Class.create({
 				{
 					var charCode = e.charCode || e.keyCode;
 					if (e.keyCode == Event.KEY_RETURN ||
-					    (charCode == Event.CHAR_COMMA && !this.options.get('allowComma')))
+						(charCode == Event.CHAR_COMMA && !this.options.get('allowComma')))
 					{
 						this.insertCurrentValue = true;
 					}
@@ -891,11 +892,11 @@ var ProtoMultiSelect = Class.create(TextboxList, {
 					break;
 				
 				default:
-				    if (e.keyCode == Event.KEY_COMMA && !this.options.get('allowComma'))
-				    {
-				        break;
-				    }
-				    
+					if (e.keyCode == Event.KEY_COMMA && !this.options.get('allowComma'))
+					{
+						break;
+					}
+					
 					// If the user doesn't add comma after, the value is discarded upon submit
 					this.current_input = this.options.get('encodeEntities') ? input.value.strip().entitizeHTML() : input.value.strip().escapeHTML();
 					this.update();
@@ -957,24 +958,24 @@ var ProtoMultiSelect = Class.create(TextboxList, {
   {
 		var input_values = this.element.value.split(this.options.get('separator')).invoke('strip');
 
-    if (this.data.length)
-    {
-      this.data.select(function(el) { return input_values.include(el.evalJSON(true).value) }).each(function(el)
-      {
-        el = el.evalJSON(true);
-        this.add({ value: el.value, caption: el.caption});
-        delete this.data[this.data.indexOf(Object.toJSON(el))];
-        input_values = input_values.without(el.value);
-      }, this);
-    }
-    
-    input_values.each(function(el)
-    {
-      if (!el.empty())
-      {
-        this.add({ value: el, caption: el });
-      }
-    }, this);
+	if (this.data.length)
+	{
+	  this.data.select(function(el) { return input_values.include(el.evalJSON(true).value) }).each(function(el)
+	  {
+		el = el.evalJSON(true);
+		this.add({ value: el.value, caption: el.caption});
+		delete this.data[this.data.indexOf(Object.toJSON(el))];
+		input_values = input_values.without(el.value);
+	  }, this);
+	}
+	
+	input_values.each(function(el)
+	{
+	  if (!el.empty())
+	  {
+		this.add({ value: el, caption: el });
+	  }
+	}, this);
   }
 });
 
